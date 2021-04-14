@@ -326,16 +326,16 @@ Comme pour le composant `Home`, nous allons ajouter un state pour définir quelq
 ```javascript
 const Game = () => {
     const [game, setGame] = React.useState(new Array(9).fill(null)); // État du jeu, un tableau sans aucun coup pour commencer
-    const [piece, setPiece] = React.useState('X'); // Notre pièce
     const [turn, setTurn] = React.useState(true); // Est-ce que c'est à nous de jouer ?
     const [end, setEnd] = React.useState(false); // Est-ce que c'est la fin de la partie ?
     const [room, setRoom] = React.useState(''); // la salle de jeu
     const [statusMessage, setStatusMessage] = React.useState(''); // Un message concernant l'état du jeu
     const [currentPlayerScore, setCurrentPlayerScore] = React.useState(0); // Le score du joueur
-    const [opponentPlayer, setOpponentPlayer] = React.useState([]); // L'autre joueur
+    const [opponentPlayer, setOpponentPlayer] = React.useState({}); // L'autre joueur
     const [waiting, setWaiting] = React.useState(false); // Est-ce que on est entrain d'attendre l'autre joueur ?
     const [joinError, setJoinError] = React.useState(false); // Est-ce qu'il y a eu une erreur pour joindre la partie ?
-    const [socketId, setSocketId] = React.useState(null); // 
+    let socketId = '';
+    let piece = '';
 
     return (
         <div>New game is started !</div>
@@ -502,20 +502,21 @@ socket.on('newRoomJoin', ({ room, name }) => {
         if (peopleInRoom === 2) {
             //Assign the piece to each player in the backend data structure and then
             //emit it to each of the player so they can store it in their state
-            pieceAssignment(room);
-            currentPlayers = rooms.get(room).players;
+            pieceAssignment(room)
+            currentPlayers = rooms.get(room).players
             for (const player of currentPlayers) {
-                io.to(player.id).emit('pieceAssignment', { piece: player.piece, id: player.id });
+                console.log(player);
+                io.to(player.id).emit('pieceAssignment', { playerPiece: player.piece, id: player.id })
             }
-            newGame(room);
+            newGame(room)
 
             //When starting, the game state, turn and the list of both players in
             //the room are required in the front end to render the correct information
             const currentRoom = rooms.get(room)
             const gameState = currentRoom.board.game
             const turn = currentRoom.board.turn
-            const players = currentRoom.players.map((player) => [player.id, player.name])
-            io.to(room).emit('starting', { gameState, players, turn })
+            const players = currentRoom.players.map((player) => ({id : player.id, name : player.name}))
+            io.to(room).emit('starting', { gameState, players, playerTurn : turn })
         }
 
         //Too many people so we kick them out of the room and redirect 
