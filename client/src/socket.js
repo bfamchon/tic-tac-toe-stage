@@ -1,5 +1,5 @@
 import socketIOClient from 'socket.io-client'
-const ENDPOINT = 'ws://localhost:4000';
+const ENDPOINT = 'https://tic-tac-toe-stage.herokuapp.com/';
 
 let socket = null;
 

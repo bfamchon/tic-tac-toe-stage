@@ -9,7 +9,7 @@ import ScoreBoard from '../components/ScoreBoard'
 
 import io from 'socket.io-client'
 import qs from 'qs'
-const ENDPOINT = 'ws://localhost:4000'
+const ENDPOINT = 'https://tic-tac-toe-stage.herokuapp.com/'
 
 class Game extends Component {
     constructor(props) {
