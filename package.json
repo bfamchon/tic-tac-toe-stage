@@ -6,7 +6,7 @@
   "scripts": {
     "client-install": "npm install --prefix client",
     "server-install": "npm install --prefix server",
-    "install-all-deps": "concurrently \"npm run server-install\" \"npm run client-install\"",
+    "preinstall": "concurrently \"npm run server-install\" \"npm run client-install\"",
     "build": "cd client && npm run build",
     "start": "cd server && npm run start"
   },
@@ -22,5 +22,8 @@
   "homepage": "https://github.com/bfamchon/tic-tac-toe-stage#readme",
   "dependencies": {
     "concurrently": "^6.0.2"
+  },
+  "engines": {
+    "node": "14.x"
   }
 }
