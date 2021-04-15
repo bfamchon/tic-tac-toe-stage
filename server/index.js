@@ -1,4 +1,5 @@
 //utilities functions and classes
+const path = require('path');
 const { randRoom, randPiece } = require('./utilities/utils')
 const Player = require('./utilities/player')
 const Board = require('./utilities/board')
