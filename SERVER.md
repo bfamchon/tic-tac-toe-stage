@@ -1056,3 +1056,31 @@ Après avoir trouvé les événements à lancer dans l'étape précédente, tu d
 Et Hop, une fois ces événements gérés tu devrais pouvoir relancer une partie ! ;)
 
 ## Gestion des scores !
+
+Nous allons maintenant afficher un tableau des scores pour garder une trace au fur et à mesure des parties. Dans l'idée, nous allons créer un composant ScoreBoard, le tableau des scores, et un composant Score, qui correspondra au score d'un joueur.
+
+Commençons par créer le composant `Score.js`, c'est un composant dans sa forme la plus simple (un peu comme `Status`), qui prendra en paramètres 2 choes: `name` et `score`. Contrairement à `Status` qui lui prenait en paramètre 1 seul item: `message`.
+
+Ce composant devra afficher un `<div>...</div>` avec une className `score-container`. Si tu as déjà fait du CSS et du HTML, tu sais que d'habitude, on utilise le mot clef `class="ma-class"`... En React, on utilise `className="ma-class"`, c'est la même chose ;)
+
+À l'intérieur de ce `div`, nous allons avoir 2 `h1`, le premier avec une className `name`, et qui affichera la propriété `name`...
+
+Le second avec une className `score`, qui affichera la propriété `score`.
+
+**À toi de jouer !**
+
+Créons maintenant le composant `ScoreBoard`, on part toujours sur la base d'un composant simple qui prend cette fois en propriété un seul item: `data`.
+
+Niveau affichage, il est également composé d'un `div` avec une `className='score-board'`.
+
+Dans ce `div`, nous allons avoir un `h1` de cette forme `<h1 className="score-title">Score Board</h1>`, représentant le titre du tableau des scores...
+
+Et nous allons ensuite afficher, sous le `h1`  le composant `Score` que tu as créé précédement.
+
+*Tu as peut être déjà une idée de comment faire en fonction de ce que l'on a déjà vu ?*
+
+Pour t'aiguiller, nous allons nous baser sur ce que l'on faisait dans `Home` par exemple pour utiliser le composant `Loading`, par exemple: `<Loading loading={loading} />`. Nous avons donc utilisé le composant appelé `Loading` en lui passant une propriété `loading={...}` qui vaut dans notre cas `loading`, valeur provenant du state...
+
+Dans le composant `ScoreBoard`, nous allons utiliser le composant `Score` avec une propriété `name` qui vaudra `data.player1[0]`, et une propriété `score` qui vaudra `data.player1[1]`.
+
+Nous venons donc de gérer le score du premier joueur... Reste à faire la même chose juste en dessous pour le `player2` ! ;)
