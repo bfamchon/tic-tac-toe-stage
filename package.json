@@ -6,7 +6,7 @@
   "scripts": {
     "client-install": "npm install --prefix client",
     "server-install": "npm install --prefix server",
-    "preinstall": "concurrently \"npm run server-install\" \"npm run client-install\"",
+    "postinstall": "concurrently \"npm run server-install\" \"npm run client-install\"",
     "build": "cd client && npm run build",
     "start": "cd server && npm run start"
   },
