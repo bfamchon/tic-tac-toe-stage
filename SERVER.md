@@ -465,7 +465,7 @@ Au dessus de la fonction `getGameByState`, nous allons insérer un `useEffect` c
         socket.on('waiting', () => {
             setWaiting(true);
             setCurrentPlayerScore(0);
-            setOpponentPlayer([]);
+            setOpponentPlayer({});
         });
         return () => {socket = null;}
     }, []);
@@ -505,8 +505,7 @@ socket.on('newRoomJoin', ({ room, name }) => {
             pieceAssignment(room)
             currentPlayers = rooms.get(room).players
             for (const player of currentPlayers) {
-                console.log(player);
-                io.to(player.id).emit('pieceAssignment', { playerPiece: player.piece, id: player.id })
+                io.to(player.id).emit('pieceAssignment', { piece: player.piece, id: player.id })
             }
             newGame(room)
 
@@ -515,8 +514,8 @@ socket.on('newRoomJoin', ({ room, name }) => {
             const currentRoom = rooms.get(room)
             const gameState = currentRoom.board.game
             const turn = currentRoom.board.turn
-            const players = currentRoom.players.map((player) => ({id : player.id, name : player.name}))
-            io.to(room).emit('starting', { gameState, players, playerTurn : turn })
+            const players = currentRoom.players.map((player) => [player.id, player.name])
+            io.to(room).emit('starting', { gameState, players, turn })
         }
 
         //Too many people so we kick them out of the room and redirect 
@@ -654,3 +653,406 @@ function kick(room) {
     currentRoom.players.pop()
 }
 ```
+
+Dans le `newRoomJoin`, on voit la logique de : "Si l'utilisateur est seul, alors on envoit un événement `waiting`", "si les utilisateurs sont 2, la partie peut être lancée et on envoie à chaque personne leur pièce" (`X` ou `O`) : `io.to(player.id).emit('pieceAssignment', { playerPiece: player.piece, id: player.id })` puis on signale à nos utilisateurs que la partie peut commencer: `io.to(room).emit('starting', { gameState, players, playerTurn : turn })`.
+
+Ces événements, nous allons les réceptionner dans `Game`, sous l'événement `waiting` qui est déjà géré.
+
+```javascript
+        ...
+        socket.on('starting', ({ gameState, players, playerTurn }) => {
+            setWaiting(false);
+            gameStart(gameState, players, playerTurn)
+        })
+        socket.on('joinError', () => setJoinError(true))
+
+        //Listening to the assignment of piece store the piece along with the in state
+        //socket id in local socketID variable
+        socket.on('pieceAssignment', ({ playerPiece, id }) => {
+            console.log('pieceAssignment : ', id, playerPiece);
+            piece = playerPiece;
+            socketId = id;
+        })
+        ...
+```
+
+Nous allons ensuite créer la fonction `gameStart` ainsi que `decideTurn` au dessus du `React.useEffect(...)`:
+
+
+```javascript
+    ... 
+    const decideTurn = (playerTurn) => {
+        // Est-ce que ma pièce est celle qui doit jouer ? 
+        if (piece === playerTurn) {
+            setTurn(true);
+        } else {
+            setTurn(false);
+        }
+    };
+
+    //Setting the states to start a game when new user join
+    const gameStart = (gameState, players, playerTurn) => {
+        console.log('players : ', players);
+        console.log('me.id : ', socketId);
+        console.log('who s turn ? ', playerTurn);
+        console.log('my piece : ', piece);
+        const opponent = players.find(player => player.id !== socketId)
+        console.log('other player: ',s opponent);
+        setOpponentPlayer(opponent);
+        setEnd(false);
+        setGame(gameState);
+        decideTurn(playerTurn)
+        setStatusMessage(playerTurn === piece ? 'Your Turn' : `${opponent.name}'s Turn`)
+    }
+    ...
+```
+
+## Plateau & Mouvements
+
+ Nous allons maintenant nous intéresser à l'affichage du plateau et à la gestion des mouvements, comme j'ai un peu merdé on va se contenter de remplacer le composant Game, globalement c'est un la même chose mais écrit différement comme on faisait il y a quelques années. Tu retrouveras peut-être cette façon d'écrire les composants dans tes futurs développement ! 
+
+ ```javascript 
+import React, { Component } from 'react';
+import { Redirect } from 'react-router-dom'
+
+import Square from '../components/Square';
+import Wait from '../components/Wait'
+import Status from '../components/Status'
+import PlayAgain from '../components/PlayAgain'
+
+import io from 'socket.io-client'
+import qs from 'qs'
+const ENDPOINT = 'ws://localhost:4000'
+
+class Game extends Component {
+    constructor(props) {
+        super(props)
+        this.state = {
+            game: new Array(9).fill(null),
+            piece: 'X',
+            turn: true,
+            end: false,
+            room: '',
+            statusMessage: '',
+            currentPlayerScore: 0,
+            opponentPlayer: [],
+            //State to check when a new user join
+            waiting: false,
+            joinError: false
+        }
+        this.socketID = null
+    }
+
+    componentDidMount() {
+        //Getting the room and the username information from the url
+        //Then emit to back end to process
+        this.socket = io(ENDPOINT)
+        const { room, name } = qs.parse(window.location.search, {
+            ignoreQueryPrefix: true
+        })
+        this.setState({ room })
+        this.socket.emit('newRoomJoin', { room, name })
+
+        //New user join, logic decide on backend whether to display 
+        //the actual game or the wait screen or redirect back to the main page
+        this.socket.on('waiting', () => this.setState({ waiting: true, currentPlayerScore: 0, opponentPlayer: [] }))
+        this.socket.on('starting', ({ gameState, players, turn }) => {
+            this.setState({ waiting: false })
+            this.gameStart(gameState, players, turn)
+        })
+        this.socket.on('joinError', () => this.setState({ joinError: true }))
+
+        //Listening to the assignment of piece store the piece along with the in state
+        //socket id in local socketID variable
+        this.socket.on('pieceAssignment', ({ piece, id }) => {
+            this.setState({ piece: piece })
+            this.socketID = id
+        })
+
+        //Game play logic events
+        this.socket.on('update', ({ gameState, turn }) => this.handleUpdate(gameState, turn))
+        this.socket.on('winner', ({ gameState, id }) => this.handleWin(id, gameState))
+        this.socket.on('draw', ({ gameState }) => this.handleDraw(gameState))
+
+        this.socket.on('restart', ({ gameState, turn }) => this.handleRestart(gameState, turn))
+    }
+
+    //Setting the states to start a game when new user join
+    gameStart(gameState, players, turn) {
+        const opponent = players.filter(([id, name]) => id !== this.socketID)[0][1]
+        this.setState({ opponentPlayer: [opponent, 0], end: false })
+        this.setBoard(gameState)
+        this.setTurn(turn)
+        this.setMessage()
+    }
+
+    //When some one make a move, emit the event to the back end for handling
+    handleClick = (index) => {
+        const { game, piece, end, turn, room } = this.state
+        if (!game[index] && !end && turn) {
+            this.socket.emit('move', { room, piece, index })
+        }
+    }
+
+    //Setting the states each move when the game haven't ended (no wins or draw)
+    handleUpdate(gameState, turn) {
+        this.setBoard(gameState)
+        this.setTurn(turn)
+        this.setMessage()
+    }
+
+    //Setting the states when some one wins
+    handleWin(id, gameState) {
+        this.setBoard(gameState)
+        if (this.socketID === id) {
+            const playerScore = this.state.currentPlayerScore + 1
+            this.setState({ currentPlayerScore: playerScore, statusMessage: 'You Win' })
+        } else {
+            const opponentScore = this.state.opponentPlayer[1] + 1
+            const opponent = this.state.opponentPlayer
+            opponent[1] = opponentScore
+            this.setState({ opponentPlayer: opponent, statusMessage: `${this.state.opponentPlayer[0]} Wins` })
+        }
+        this.setState({ end: true })
+    }
+
+    //Setting the states when there is a draw at the end
+    handleDraw(gameState) {
+        this.setBoard(gameState)
+        this.setState({ end: true, statusMessage: 'Draw' })
+    }
+
+    playAgainRequest = () => {
+        this.socket.emit('playAgainRequest', this.state.room)
+    }
+
+    //Handle the restart event from the back end
+    handleRestart(gameState, turn) {
+        this.setBoard(gameState)
+        this.setTurn(turn)
+        this.setMessage()
+        this.setState({ end: false })
+    }
+
+    //Some utilities methods to set the states of the board
+
+    setMessage() {
+        const message = this.state.turn ? 'Your Turn' : `${this.state.opponentPlayer[0]}'s Turn`
+        this.setState({ statusMessage: message })
+    }
+
+    setTurn(turn) {
+        if (this.state.piece === turn) {
+            this.setState({ turn: true })
+        } else {
+            this.setState({ turn: false })
+        }
+    }
+
+    setBoard(gameState) {
+        this.setState({ game: gameState })
+    }
+
+    renderSquare(i) {
+        return (
+            <Square key={i} value={this.state.game[i]}
+                player={this.state.piece}
+                end={this.state.end}
+                id={i}
+                onClick={this.handleClick}
+                turn={this.state.turn} />
+        )
+    }
+
+    render() {
+        if (this.state.joinError) {
+            return (
+                <Redirect to={`/`} />
+            )
+        } else {
+            const squareArray = []
+            for (let i = 0; i < 9; i++) {
+                const newSquare = this.renderSquare(i)
+                squareArray.push(newSquare)
+            }
+            return (
+                <>
+                    <Wait display={this.state.waiting} room={this.state.room} />
+                    <Status message={this.state.statusMessage} />
+                    <div className="board">
+                        {squareArray}
+                    </div>
+                    <PlayAgain end={this.state.end} onClick={this.playAgainRequest} />
+                </>
+            )
+        }
+    }
+}
+
+
+export default Game
+ ```
+
+Nous voyons ici un nouvel événement `move` qui devra être traité plus tard dans notre serveur... Mais d'abord, créons donc ce composant `Square.js` représantant la case avec ou non l'icône `X` ou `O`;
+
+```javascript
+import React from 'react';
+import Icon from './icons'
+
+const Square = (props) => {
+  return (
+    <div className="square" onClick={props.onClick.bind(this, props.id)}>
+      <Icon {...props}/> 
+    </div>
+  );
+}
+
+export default Square;
+```
+
+Nous allons maintenant gérer l'affichage de l'icône en créant un dossier `icons` dans `components`, il sera composé d'un fichier `index.js`, le point d'entré qui sera appelé implicitement par le composant `Square` dans l'import `import Icon from './icons';`:
+
+```javascript
+import React from 'react';
+import X from './X'
+import O from './O'
+
+const Icon = (props) => {
+    switch(props.value){
+        case 'X':
+            return <X />
+        case 'O':
+            return <O />
+        default:
+            if (props.end || !props.turn){
+                return <div></div>
+            }else{
+                switch(props.player){
+                    case 'X':
+                        return <div className='placeHolder'><X /></div>
+                    case 'O':
+                        return <div className='placeHolder'><O /></div>
+                    default:
+                        return <div></div>
+                }   
+            }
+    }
+}
+
+export default Icon;
+```
+
+Puis deux fichiers pour gérer les icônes X et O, le premier fichier `X.js`: 
+
+```javascript
+import React from 'react';
+
+const beforeStyle ={
+    background: 'white',
+    width: '93%',
+    height: '13%',
+    position: 'absolute',
+    transform: 'rotate(45deg)'
+}
+const afterStyle ={
+    background: 'white',
+    width: '93%',
+    height: '13%',
+    position: 'absolute',
+    transform: 'rotate(-45deg)'
+}
+
+
+const X = () => {
+    return (
+        <>
+            <div className="before" style={beforeStyle}></div>
+            <div className = "after" style={afterStyle}></div>
+        </>
+    );
+}
+
+export default X;
+```
+
+Et le second, `O.js`:
+
+```javascript
+import React from 'react';
+
+const beforeStyle ={
+    background: 'white',
+    width: '90%',
+    height: '90%',
+    position: 'absolute',
+    borderRadius: '50%',
+}
+const afterStyle ={
+    background: 'var(--dark-blue)',
+    width: '70%',
+    height: '70%',
+    position: 'absolute',
+    borderRadius: '50%',
+}
+
+
+const O = () => {
+    return (
+        <>
+            <div className="before" style={beforeStyle}></div>
+            <div className = "after" style={afterStyle}></div>
+        </>
+    );
+}
+
+export default O;
+```
+
+Côté serveur, nous allons gérer l'événement `move` en remplaçant l'existant par 
+
+```javascript
+    //Listener event for each move and emit different events depending on the state of the game
+    socket.on('move', ({ room, piece, index }) => {
+        currentBoard = rooms.get(room).board
+        currentBoard.move(index, piece)
+
+        if (currentBoard.checkWinner(piece)) {
+            // TODO à l'image de ce qui a été fait pour l'événement 'starting'...
+            // TODO ...émettre un événement 'winner' pour la room
+            // Avec comme objet `{ gameState: currentBoard.game, id: socket.id }`
+        } else if (currentBoard.checkDraw()) {
+            // TODO à l'image de ce qui a été fait pour l'événement 'starting'...
+            // TODO ...émettre un événement 'draw' pour la room
+            // Avec comme objet `{ gameState: currentBoard.game }`
+        } else {
+            currentBoard.switchTurn();
+            // TODO à l'image de ce qui a été fait pour l'événement 'starting'...
+            // TODO ...émettre un événement 'update' pour la room
+            // Avec comme objet `{ gameState: currentBoard.game, turn: currentBoard.turn }`
+        }
+    })
+```
+
+Après avoir trouvé les événements à lancer dans l'étape précédente, tu devrais pouvoir jouer une partie complète en ouvrant un nouveau navigateur !
+
+À la fin de cette partie, tu verras un bouton pour rejouer... Mais rien ne se passe ! C'est parce-qu'il faudrait gérer cet événement comme il faut côté serveur !
+
+```javascript
+    //Listener event for a new game
+    socket.on('playAgainRequest', (room) => {
+        console.log('playAgainRequest event received !');
+        currentRoom = rooms.get(room)
+        currentRoom.board.reset()
+        //Reassign new piece so a player can't always go first
+        pieceAssignment(room)
+        currentPlayers = currentRoom.players
+        for (const player of currentPlayers) {
+            // TODO Ici, on cherche à lancer l'événement `pieceAssignment` pour chaque joueur, comme on l'a fait plus haut dans `newRoomJoin`
+        }
+        // TODO Ici, on cherche à lancer l'événement `restart` à la room, avec comme objet `{ gameState: currentRoom.board.game, turn: currentRoom.board.turn }`
+    })
+```
+
+Et Hop, une fois ces événements gérés tu devrais pouvoir relancer une partie ! ;)
+
+## Gestion des scores !
