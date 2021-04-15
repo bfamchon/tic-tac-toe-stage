@@ -1,0 +1,26 @@
+{
+  "name": "tic-tac-toe-stage",
+  "version": "1.0.0",
+  "description": "En suivant ce tutoriel pour découvrir le développement web, tu vas construire une version en réseau du célèbre TIC-TAC-TOE.",
+  "main": "index.js",
+  "scripts": {
+    "client-install": "npm install --prefix client",
+    "server-install": "npm install --prefix server",
+    "install-all-deps": "concurrently \"npm run server-install\" \"npm run client-install\"",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm run start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bfamchon/tic-tac-toe-stage.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bfamchon/tic-tac-toe-stage/issues"
+  },
+  "homepage": "https://github.com/bfamchon/tic-tac-toe-stage#readme",
+  "dependencies": {
+    "concurrently": "^6.0.2"
+  }
+}
